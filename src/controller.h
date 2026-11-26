@@ -99,6 +99,10 @@ private:
     double m_portaEnabledNorm = kDefaultPortamentoEnabledNorm;
     double m_portaModeNorm = kDefaultPortamentoModeNorm;
     double m_glideTimeNorm = kDefaultGlideTimeNorm;
+    double m_velP1X = kDefaultVelP1X;
+    double m_velP1Y = kDefaultVelP1Y;
+    double m_velP2X = kDefaultVelP2X;
+    double m_velP2Y = kDefaultVelP2Y;
 
     Sf2Status m_status;
     X11View* m_activeView = nullptr;

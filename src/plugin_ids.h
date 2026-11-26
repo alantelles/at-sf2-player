@@ -3,6 +3,7 @@
 #include "pluginterfaces/base/funknown.h"
 #include "pluginterfaces/vst/vsttypes.h"
 #include "pluginterfaces/base/ibstream.h"
+#include "velocity_curve.h"
 
 #include <algorithm>
 #include <cmath>
@@ -33,6 +34,10 @@ enum ParamIDs : Steinberg::Vst::ParamID {
     kParamPortamentoEnabled = 11,
     kParamPortamentoMode = 12, // 0 = Retrigger, 1 = Legato
     kParamGlideTime = 13,
+    kParamVelP1X = 14,
+    kParamVelP1Y = 15,
+    kParamVelP2X = 16,
+    kParamVelP2Y = 17,
 };
 
 // Default normalized values
@@ -50,6 +55,10 @@ constexpr double kDefaultFineTuneNorm = 0.5;   // 0 cents (-100..+100)
 constexpr double kDefaultPortamentoEnabledNorm = 0.0;
 constexpr double kDefaultPortamentoModeNorm = 0.0; // Retrigger
 constexpr double kDefaultGlideTimeNorm = 0.35;     // ~90 ms
+constexpr double kDefaultVelP1X = 0.33;
+constexpr double kDefaultVelP1Y = 0.33;
+constexpr double kDefaultVelP2X = 0.67;
+constexpr double kDefaultVelP2Y = 0.67;
 
 // Inter-component message IDs and attribute keys
 constexpr const char* kMsgLoadSf2 = "LoadSF2";
@@ -68,7 +77,8 @@ constexpr uint32_t kStateMagic = 0x53534632; // "SSF2"
 constexpr uint32_t kStateVersion1 = 1;
 constexpr uint32_t kStateVersion2 = 2;
 constexpr uint32_t kStateVersion3 = 3;
-constexpr uint32_t kStateVersion = 4;
+constexpr uint32_t kStateVersion4 = 4;
+constexpr uint32_t kStateVersion = 5;
 
 struct PresetEntry {
     int32_t index = 0;
@@ -208,6 +218,7 @@ struct PluginStateData {
     double coarseTuneNorm = kDefaultCoarseTuneNorm;
     double fineTuneNorm = kDefaultFineTuneNorm;
     PortamentoSettings portamento;
+    VelocityCurve velocityCurve;
     std::string sf2Path;
 
     bool writeToStream(Steinberg::IBStream* stream) const {
@@ -238,6 +249,10 @@ struct PluginStateData {
         if (!writeStreamBytes(stream, &portaFlag, sizeof(portaFlag))) return false;
         if (!writeStreamBytes(stream, &legatoFlag, sizeof(legatoFlag))) return false;
         if (!writeStreamBytes(stream, &portamento.glideNorm, sizeof(portamento.glideNorm))) return false;
+        if (!writeStreamBytes(stream, &velocityCurve.p1x, sizeof(velocityCurve.p1x))) return false;
+        if (!writeStreamBytes(stream, &velocityCurve.p1y, sizeof(velocityCurve.p1y))) return false;
+        if (!writeStreamBytes(stream, &velocityCurve.p2x, sizeof(velocityCurve.p2x))) return false;
+        if (!writeStreamBytes(stream, &velocityCurve.p2y, sizeof(velocityCurve.p2y))) return false;
         return true;
     }
 
@@ -248,7 +263,8 @@ struct PluginStateData {
         if (!readStreamBytes(stream, &magic, sizeof(magic)) || magic != kStateMagic) return false;
         if (!readStreamBytes(stream, &version, sizeof(version))) return false;
         if (version != kStateVersion1 && version != kStateVersion2 &&
-            version != kStateVersion3 && version != kStateVersion) return false;
+            version != kStateVersion3 && version != kStateVersion4 &&
+            version != kStateVersion) return false;
 
         double vol = kDefaultVolumeNorm;
         if (!readStreamBytes(stream, &vol, sizeof(vol))) return false;
@@ -302,7 +318,7 @@ struct PluginStateData {
             fineTuneNorm = std::clamp(fine, 0.0, 1.0);
         }
 
-        if (version >= kStateVersion) {
+        if (version >= kStateVersion4) {
             uint8_t portaFlag = 0;
             uint8_t legatoFlag = 0;
             double glide = kDefaultGlideTimeNorm;
@@ -312,6 +328,19 @@ struct PluginStateData {
             portamento.enabled = (portaFlag != 0);
             portamento.legato = (legatoFlag != 0);
             portamento.glideNorm = std::clamp(glide, 0.0, 1.0);
+        }
+
+        if (version >= kStateVersion) {
+            double x1 = kDefaultVelP1X, y1 = kDefaultVelP1Y;
+            double x2 = kDefaultVelP2X, y2 = kDefaultVelP2Y;
+            if (!readStreamBytes(stream, &x1, sizeof(x1))) return false;
+            if (!readStreamBytes(stream, &y1, sizeof(y1))) return false;
+            if (!readStreamBytes(stream, &x2, sizeof(x2))) return false;
+            if (!readStreamBytes(stream, &y2, sizeof(y2))) return false;
+            velocityCurve.p1x = std::clamp(x1, 0.0, 1.0);
+            velocityCurve.p1y = std::clamp(y1, 0.0, 1.0);
+            velocityCurve.p2x = std::clamp(x2, 0.0, 1.0);
+            velocityCurve.p2y = std::clamp(y2, 0.0, 1.0);
         }
 
         return true;

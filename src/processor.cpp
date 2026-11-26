@@ -161,6 +161,10 @@ tresult PLUGIN_API Processor::setState(IBStream* state) {
     m_portaEnabled.store(data.portamento.enabled, std::memory_order_relaxed);
     m_portaLegato.store(data.portamento.legato, std::memory_order_relaxed);
     m_glideTimeNorm.store(data.portamento.glideNorm, std::memory_order_relaxed);
+    m_velP1X.store(data.velocityCurve.p1x, std::memory_order_relaxed);
+    m_velP1Y.store(data.velocityCurve.p1y, std::memory_order_relaxed);
+    m_velP2X.store(data.velocityCurve.p2x, std::memory_order_relaxed);
+    m_velP2Y.store(data.velocityCurve.p2y, std::memory_order_relaxed);
 
     m_synth.setVolumeGain(volumeNormToGain(data.volumeNorm));
     m_synth.setModWheel(-1, static_cast<float>(data.modWheelNorm));
@@ -200,6 +204,10 @@ tresult PLUGIN_API Processor::getState(IBStream* state) {
     data.portamento.enabled = m_portaEnabled.load(std::memory_order_relaxed);
     data.portamento.legato = m_portaLegato.load(std::memory_order_relaxed);
     data.portamento.glideNorm = m_glideTimeNorm.load(std::memory_order_relaxed);
+    data.velocityCurve.p1x = m_velP1X.load(std::memory_order_relaxed);
+    data.velocityCurve.p1y = m_velP1Y.load(std::memory_order_relaxed);
+    data.velocityCurve.p2x = m_velP2X.load(std::memory_order_relaxed);
+    data.velocityCurve.p2y = m_velP2Y.load(std::memory_order_relaxed);
     {
         std::lock_guard<std::mutex> lock(m_stateMutex);
         data.sf2Path = m_sf2Path;
@@ -319,6 +327,18 @@ void Processor::handleParameterChanges(IParameterChanges* paramChanges) {
                 m_glideTimeNorm.store(val, std::memory_order_relaxed);
                 portaChanged = true;
                 break;
+            case kParamVelP1X:
+                m_velP1X.store(val, std::memory_order_relaxed);
+                break;
+            case kParamVelP1Y:
+                m_velP1Y.store(val, std::memory_order_relaxed);
+                break;
+            case kParamVelP2X:
+                m_velP2X.store(val, std::memory_order_relaxed);
+                break;
+            case kParamVelP2Y:
+                m_velP2Y.store(val, std::memory_order_relaxed);
+                break;
             default:
                 break;
         }
@@ -390,7 +410,17 @@ tresult PLUGIN_API Processor::process(ProcessData& data) {
         }
 
         if (e.type == Event::kNoteOnEvent) {
-            m_synth.noteOn(e.noteOn.channel, e.noteOn.pitch, e.noteOn.velocity);
+            float vel = e.noteOn.velocity;
+            if (vel > 0.0f) {
+                VelocityCurve curve{
+                    m_velP1X.load(std::memory_order_relaxed),
+                    m_velP1Y.load(std::memory_order_relaxed),
+                    m_velP2X.load(std::memory_order_relaxed),
+                    m_velP2Y.load(std::memory_order_relaxed)
+                };
+                vel = curve.evaluate(vel);
+            }
+            m_synth.noteOn(e.noteOn.channel, e.noteOn.pitch, vel);
         } else if (e.type == Event::kNoteOffEvent) {
             m_synth.noteOff(e.noteOff.channel, e.noteOff.pitch);
         }

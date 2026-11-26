@@ -388,8 +388,8 @@ int main() {
     assert(factory->createInstance(ctrlUid, IEditController::iid, reinterpret_cast<void**>(&ctrl)) == kResultOk);
     assert(ctrl->initialize(hostApp) == kResultOk);
 
-    // Verify all 14 parameters & MIDI mapping (Volume CC7, ModWheel CC1, Porta CC65/CC5, PitchBend, Sustain)
-    assert(ctrl->getParameterCount() == 14);
+    // Verify all 18 parameters & MIDI mapping (Volume CC7, ModWheel CC1, Porta CC65/CC5, PitchBend, Sustain)
+    assert(ctrl->getParameterCount() == 18);
     assert(std::abs(ctrl->getParamNormalized(kParamAdsrEnabled) - 1.0) < 1e-6);
     IMidiMapping* midiMap = nullptr;
     assert(ctrl->queryInterface(IMidiMapping::iid, reinterpret_cast<void**>(&midiMap)) == kResultOk);
@@ -415,7 +415,7 @@ int main() {
     assert(view->isPlatformTypeSupported(kPlatformTypeX11EmbedWindowID) == kResultTrue);
     ViewRect rect{};
     assert(view->getSize(&rect) == kResultOk);
-    assert(rect.getWidth() == 500 && rect.getHeight() == 478);
+    assert(rect.getWidth() == 700 && rect.getHeight() == 478);
     assert(view->canResize() == kResultFalse);
     view->release();
 
@@ -503,6 +503,10 @@ int main() {
     paramChanges->addSinglePoint(kParamPortamentoEnabled, 1.0);
     paramChanges->addSinglePoint(kParamPortamentoMode, 1.0); // Legato
     paramChanges->addSinglePoint(kParamGlideTime, 0.45);
+    paramChanges->addSinglePoint(kParamVelP1X, 0.0);
+    paramChanges->addSinglePoint(kParamVelP1Y, 1.0);
+    paramChanges->addSinglePoint(kParamVelP2X, 1.0);
+    paramChanges->addSinglePoint(kParamVelP2Y, 1.0); // Fixed 127 velocity curve
 
     ProcessData pdata{};
     pdata.processMode = kRealtime;
@@ -601,6 +605,21 @@ int main() {
     assert(std::abs(ctrl2->getParamNormalized(kParamPortamentoEnabled) - 1.0) < 1e-6);
     assert(std::abs(ctrl2->getParamNormalized(kParamPortamentoMode) - 1.0) < 1e-6);
     assert(std::abs(ctrl2->getParamNormalized(kParamGlideTime) - 0.45) < 1e-6);
+    assert(std::abs(ctrl2->getParamNormalized(kParamVelP1X) - 0.0) < 1e-6);
+    assert(std::abs(ctrl2->getParamNormalized(kParamVelP1Y) - 1.0) < 1e-6);
+    assert(std::abs(ctrl2->getParamNormalized(kParamVelP2X) - 1.0) < 1e-6);
+    assert(std::abs(ctrl2->getParamNormalized(kParamVelP2Y) - 1.0) < 1e-6);
+
+    // Also verify VelocityCurve math directly (Linear, Soft, Hard, Fixed)
+    VelocityCurve linCurve{0.33, 0.33, 0.67, 0.67};
+    assert(std::abs(linCurve.evaluate(0.5f) - 0.5f) < 0.01f);
+    VelocityCurve softCurve{0.42, 0.14, 0.78, 0.48};
+    assert(softCurve.evaluate(0.5f) < 0.35f);
+    VelocityCurve hardCurve{0.22, 0.52, 0.58, 0.86};
+    assert(hardCurve.evaluate(0.5f) > 0.70f);
+    VelocityCurve fixCurve{0.0, 0.75, 1.0, 0.75};
+    assert(std::abs(fixCurve.evaluate(0.1f) - 0.75f) < 1e-4f);
+    assert(std::abs(fixCurve.evaluate(0.9f) - 0.75f) < 1e-4f);
 
     for (int i = 0; i < 200 && !relay2->m_loaded.load(); ++i) {
         std::this_thread::sleep_for(std::chrono::milliseconds(10));

@@ -54,7 +54,7 @@ public:
     void requestRedraw();
     void detachController();
 
-    static constexpr int kWidth = 500;
+    static constexpr int kWidth = 700;
     static constexpr int kHeight = 478;
 
 private:
@@ -106,6 +106,8 @@ private:
     void ensureAdsrEnabledIfNeeded(const SliderSpec& spec);
     void resetTuning();
     void resetEnvelope();
+    void setVelocityPoints(double x1, double y1, double x2, double y2);
+    void drawVelocityPanel();
     std::vector<const PresetEntry*> filterPresetsByQuery(const Sf2Status& status) const;
     static double sliderValueFromX(const SliderSpec& spec, int x);
     static const std::array<SliderSpec, 9>& sliders();
@@ -125,6 +127,9 @@ private:
     static Rect portaModeRect();
     static Rect resetAdsrRect();
     static Rect adsrToggleRect();
+    static Rect velGraphRect();
+    static Rect resetVelRect();
+    static Rect velPresetRect(int idx);
 
     Controller* m_controller = nullptr;
     Steinberg::IPlugFrame* m_plugFrame = nullptr;
@@ -154,6 +159,10 @@ private:
     bool m_hoverPortaMode = false;
     bool m_hoverResetAdsr = false;
     bool m_hoverAdsrToggle = false;
+    bool m_hoverResetVel = false;
+    int m_hoverVelPreset = -1;
+    int m_hoverVelPoint = -1;    // 0 = P1, 1 = P2
+    int m_draggingVelPoint = -1; // 0 = P1, 1 = P2
 
     bool m_searchFocused = false;
     std::string m_searchQuery;

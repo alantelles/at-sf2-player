@@ -10,6 +10,7 @@ Um plugin **VST3** leve e direto para **Linux** (`x86_64`) que carrega e toca ar
 - **Afinação**: **Coarse Tune** (`-24` a `+24` semitons), **Fine Tune** (`-100` a `+100` cents) e botão **Reset**.
 - **Portamento (Glide)**: chave **Porta: ON/OFF**, modos **Retrig** e **Legato**, ajuste de tempo de **Glide** (`5 ms` a `2.00 s`) e mapeamento MIDI CC #65 / CC #5.
 - **Envelope ADSR**: ligado por padrão (`ADSR: ON`), com **Attack**, **Decay**, **Sustain**, **Release**, botão **Reset** e piso anti-clique automático de `15 ms` mesmo no modo nativo do SF2.
+- **Curva de Velocidade (Velocity Curve)**: gráfico interativo com 2 pontos arrastáveis (`P1`, `P2`) para ajustar a resposta entre velocity de entrada e saída (Linear, Soft, Hard e Fixed ao encostar os pontos nas bordas), além de presets rápidos.
 - **MIDI & Projeto**: suporte a Note On/Off, Pitch Bend e Sustain Pedal, além de salvamento e restauração completa do estado na DAW.
 
 ## Instalação pelo Bundle Pronto (`.zip`)

@@ -102,6 +102,10 @@ private:
     std::atomic<bool> m_portaEnabled{false};
     std::atomic<bool> m_portaLegato{false};
     std::atomic<double> m_glideTimeNorm{kDefaultGlideTimeNorm};
+    std::atomic<double> m_velP1X{kDefaultVelP1X};
+    std::atomic<double> m_velP1Y{kDefaultVelP1Y};
+    std::atomic<double> m_velP2X{kDefaultVelP2X};
+    std::atomic<double> m_velP2Y{kDefaultVelP2Y};
 
     std::mutex m_stateMutex;
     std::string m_sf2Path;

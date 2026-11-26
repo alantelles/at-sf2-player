@@ -107,6 +107,10 @@ tresult PLUGIN_API Controller::setComponentState(IBStream* state) {
         m_portaEnabledNorm = data.portamento.enabled ? 1.0 : 0.0;
         m_portaModeNorm = data.portamento.legato ? 1.0 : 0.0;
         m_glideTimeNorm = data.portamento.glideNorm;
+        m_velP1X = data.velocityCurve.p1x;
+        m_velP1Y = data.velocityCurve.p1y;
+        m_velP2X = data.velocityCurve.p2x;
+        m_velP2Y = data.velocityCurve.p2y;
         m_status.selectedPresetIndex = data.selectedPresetIndex;
         if (m_status.path != data.sf2Path) {
             m_status.path = data.sf2Path;
@@ -129,7 +133,7 @@ tresult PLUGIN_API Controller::getState(IBStream* /*state*/) {
 }
 
 int32 PLUGIN_API Controller::getParameterCount() {
-    return 14;
+    return 18;
 }
 
 tresult PLUGIN_API Controller::getParameterInfo(int32 paramIndex, ParameterInfo& info) {
@@ -256,6 +260,42 @@ tresult PLUGIN_API Controller::getParameterInfo(int32 paramIndex, ParameterInfo&
             info.defaultNormalizedValue = kDefaultGlideTimeNorm;
             info.flags = ParameterInfo::kCanAutomate;
             return kResultOk;
+        case 14:
+            info.id = kParamVelP1X;
+            UString128("Vel P1 In").copyTo(info.title, 128);
+            UString128("VP1X").copyTo(info.shortTitle, 128);
+            UString128("%").copyTo(info.units, 128);
+            info.stepCount = 0;
+            info.defaultNormalizedValue = kDefaultVelP1X;
+            info.flags = ParameterInfo::kCanAutomate;
+            return kResultOk;
+        case 15:
+            info.id = kParamVelP1Y;
+            UString128("Vel P1 Out").copyTo(info.title, 128);
+            UString128("VP1Y").copyTo(info.shortTitle, 128);
+            UString128("%").copyTo(info.units, 128);
+            info.stepCount = 0;
+            info.defaultNormalizedValue = kDefaultVelP1Y;
+            info.flags = ParameterInfo::kCanAutomate;
+            return kResultOk;
+        case 16:
+            info.id = kParamVelP2X;
+            UString128("Vel P2 In").copyTo(info.title, 128);
+            UString128("VP2X").copyTo(info.shortTitle, 128);
+            UString128("%").copyTo(info.units, 128);
+            info.stepCount = 0;
+            info.defaultNormalizedValue = kDefaultVelP2X;
+            info.flags = ParameterInfo::kCanAutomate;
+            return kResultOk;
+        case 17:
+            info.id = kParamVelP2Y;
+            UString128("Vel P2 Out").copyTo(info.title, 128);
+            UString128("VP2Y").copyTo(info.shortTitle, 128);
+            UString128("%").copyTo(info.units, 128);
+            info.stepCount = 0;
+            info.defaultNormalizedValue = kDefaultVelP2Y;
+            info.flags = ParameterInfo::kCanAutomate;
+            return kResultOk;
         default:
             return kInvalidArgument;
     }
@@ -267,6 +307,10 @@ tresult PLUGIN_API Controller::getParamStringByValue(ParamID id, ParamValue valu
         case kParamVolume:
         case kParamModWheel:
         case kParamSustainLevel:
+        case kParamVelP1X:
+        case kParamVelP1Y:
+        case kParamVelP2X:
+        case kParamVelP2Y:
             std::snprintf(buf, sizeof(buf), "%.0f%%", valueNormalized * 100.0);
             UString128(buf).copyTo(string, 128);
             return kResultOk;
@@ -395,6 +439,10 @@ ParamValue PLUGIN_API Controller::getParamNormalized(ParamID id) {
         case kParamPortamentoEnabled: return m_portaEnabledNorm;
         case kParamPortamentoMode: return m_portaModeNorm;
         case kParamGlideTime: return m_glideTimeNorm;
+        case kParamVelP1X: return m_velP1X;
+        case kParamVelP1Y: return m_velP1Y;
+        case kParamVelP2X: return m_velP2X;
+        case kParamVelP2Y: return m_velP2Y;
         default: return 0.0;
     }
 }
@@ -419,6 +467,10 @@ tresult PLUGIN_API Controller::setParamNormalized(ParamID id, ParamValue value) 
             case kParamPortamentoEnabled: m_portaEnabledNorm = value; break;
             case kParamPortamentoMode: m_portaModeNorm = value; break;
             case kParamGlideTime: m_glideTimeNorm = value; break;
+            case kParamVelP1X: m_velP1X = value; break;
+            case kParamVelP1Y: m_velP1Y = value; break;
+            case kParamVelP2X: m_velP2X = value; break;
+            case kParamVelP2Y: m_velP2Y = value; break;
             default: return kInvalidArgument;
         }
     }

@@ -685,6 +685,9 @@ void X11View::processXEvents() {
                 m_hoverPortaMode = false;
                 m_hoverResetAdsr = false;
                 m_hoverAdsrToggle = false;
+                m_hoverResetVel = false;
+                m_hoverVelPreset = -1;
+                m_hoverVelPoint = -1;
                 m_hoverSliderIdx = -1;
                 m_hoverPopupRow = -1;
                 m_hoverScrollbar = false;
@@ -726,6 +729,13 @@ X11View::Rect X11View::portaToggleRect() { return {30.0, 304.0, 80.0, 22.0}; }
 X11View::Rect X11View::portaModeRect()   { return {116.0, 304.0, 64.0, 22.0}; }
 X11View::Rect X11View::resetAdsrRect()   { return {296.0, 350.0, 68.0, 22.0}; }
 X11View::Rect X11View::adsrToggleRect()  { return {372.0, 350.0, 94.0, 22.0}; }
+X11View::Rect X11View::velGraphRect()    { return {506.0, 90.0, 160.0, 160.0}; }
+X11View::Rect X11View::resetVelRect()    { return {624.0, 56.0, 46.0, 20.0}; }
+X11View::Rect X11View::velPresetRect(int idx) {
+    const int col = idx % 2;
+    const int row = idx / 2;
+    return {506.0 + col * 83.0, 354.0 + row * 28.0, 77.0, 22.0};
+}
 
 const std::array<X11View::SliderSpec, 9>& X11View::sliders() {
     static const std::array<SliderSpec, 9> kSliders = {{
@@ -833,6 +843,20 @@ void X11View::resetEnvelope() {
     resetOne(kParamDecay, kDefaultDecayNorm);
     resetOne(kParamSustainLevel, kDefaultSustainLevelNorm);
     resetOne(kParamRelease, kDefaultReleaseNorm);
+    m_needsRedraw.store(true);
+}
+
+void X11View::setVelocityPoints(double x1, double y1, double x2, double y2) {
+    if (!m_controller) return;
+    auto setOne = [this](ParamID id, double v) {
+        m_controller->beginParamEdit(id);
+        m_controller->setParamFromView(id, std::clamp(v, 0.0, 1.0));
+        m_controller->endParamEdit(id);
+    };
+    setOne(kParamVelP1X, x1);
+    setOne(kParamVelP1Y, y1);
+    setOne(kParamVelP2X, x2);
+    setOne(kParamVelP2Y, y2);
     m_needsRedraw.store(true);
 }
 
@@ -1089,6 +1113,62 @@ void X11View::handleButtonPress(int x, int y, unsigned int button, unsigned long
         return;
     }
 
+    if (resetVelRect().contains(x, y)) {
+        setVelocityPoints(kDefaultVelP1X, kDefaultVelP1Y, kDefaultVelP2X, kDefaultVelP2Y);
+        return;
+    }
+
+    for (int p = 0; p < 4; ++p) {
+        if (velPresetRect(p).contains(x, y)) {
+            if (p == 0) setVelocityPoints(0.33, 0.33, 0.67, 0.67);      // Linear
+            else if (p == 1) setVelocityPoints(0.42, 0.14, 0.78, 0.48); // Soft
+            else if (p == 2) setVelocityPoints(0.22, 0.52, 0.58, 0.86); // Hard
+            else setVelocityPoints(0.0, 1.0, 1.0, 1.0);                 // Fixed 127
+            return;
+        }
+    }
+
+    const Rect vg = velGraphRect();
+    const Rect vgHit{vg.x - 10.0, vg.y - 10.0, vg.w + 20.0, vg.h + 20.0};
+    if (vgHit.contains(x, y) && m_controller) {
+        const double p1x = m_controller->getParamNormalized(kParamVelP1X);
+        const double p1y = m_controller->getParamNormalized(kParamVelP1Y);
+        const double p2x = m_controller->getParamNormalized(kParamVelP2X);
+        const double p2y = m_controller->getParamNormalized(kParamVelP2Y);
+
+        const double sx1 = vg.x + p1x * vg.w;
+        const double sy1 = vg.y + (1.0 - p1y) * vg.h;
+        const double sx2 = vg.x + p2x * vg.w;
+        const double sy2 = vg.y + (1.0 - p2y) * vg.h;
+
+        const double d1 = std::hypot(x - sx1, y - sy1);
+        const double d2 = std::hypot(x - sx2, y - sy2);
+        int chosenPt = (d1 <= d2) ? 0 : 1;
+        if (std::min(d1, d2) > 16.0) {
+            // Clicked elsewhere on graph: pick closest horizontally
+            const double gx = std::clamp((x - vg.x) / vg.w, 0.0, 1.0);
+            chosenPt = (std::abs(gx - p1x) <= std::abs(gx - p2x)) ? 0 : 1;
+        }
+
+        const bool isDoubleClick = (timeMs - m_lastClickTime) < 300;
+        m_lastClickTime = timeMs;
+        if (isDoubleClick) {
+            setVelocityPoints(kDefaultVelP1X, kDefaultVelP1Y, kDefaultVelP2X, kDefaultVelP2Y);
+            return;
+        }
+
+        m_draggingVelPoint = chosenPt;
+        if (chosenPt == 0) {
+            m_controller->beginParamEdit(kParamVelP1X);
+            m_controller->beginParamEdit(kParamVelP1Y);
+        } else {
+            m_controller->beginParamEdit(kParamVelP2X);
+            m_controller->beginParamEdit(kParamVelP2Y);
+        }
+        m_needsRedraw.store(true);
+        return;
+    }
+
     const auto& allSliders = sliders();
     for (int i = 0; i < static_cast<int>(allSliders.size()); ++i) {
         const auto& spec = allSliders[static_cast<size_t>(i)];
@@ -1134,6 +1214,21 @@ void X11View::handleButtonRelease(int x, int y, unsigned int button) {
         }
         m_needsRedraw.store(true);
     }
+
+    if (m_draggingVelPoint >= 0) {
+        const int pt = m_draggingVelPoint;
+        m_draggingVelPoint = -1;
+        if (m_controller) {
+            if (pt == 0) {
+                m_controller->endParamEdit(kParamVelP1X);
+                m_controller->endParamEdit(kParamVelP1Y);
+            } else {
+                m_controller->endParamEdit(kParamVelP2X);
+                m_controller->endParamEdit(kParamVelP2Y);
+            }
+        }
+        m_needsRedraw.store(true);
+    }
 }
 
 void X11View::handleMotion(int x, int y) {
@@ -1151,6 +1246,28 @@ void X11View::handleMotion(int x, int y) {
     if (m_draggingSliderIdx >= 0 && m_controller) {
         const auto& spec = sliders()[static_cast<size_t>(m_draggingSliderIdx)];
         m_controller->setParamFromView(spec.paramId, sliderValueFromX(spec, x));
+        m_needsRedraw.store(true);
+        return;
+    }
+
+    if (m_draggingVelPoint >= 0 && m_controller) {
+        const Rect vg = velGraphRect();
+        double nx = std::clamp((static_cast<double>(x) - vg.x) / vg.w, 0.0, 1.0);
+        double ny = std::clamp(1.0 - (static_cast<double>(y) - vg.y) / vg.h, 0.0, 1.0);
+
+        if (m_draggingVelPoint == 0) {
+            const double p2x = m_controller->getParamNormalized(kParamVelP2X);
+            if (nx < 0.015) nx = 0.0;
+            nx = std::min(nx, std::max(0.0, p2x - 0.02));
+            m_controller->setParamFromView(kParamVelP1X, nx);
+            m_controller->setParamFromView(kParamVelP1Y, ny);
+        } else {
+            const double p1x = m_controller->getParamNormalized(kParamVelP1X);
+            if (nx > 0.985) nx = 1.0;
+            nx = std::max(nx, std::min(1.0, p1x + 0.02));
+            m_controller->setParamFromView(kParamVelP2X, nx);
+            m_controller->setParamFromView(kParamVelP2Y, ny);
+        }
         m_needsRedraw.store(true);
         return;
     }
@@ -1184,6 +1301,28 @@ void X11View::handleMotion(int x, int y) {
     const bool hoverPortaMode = !menuOpen && portaModeRect().contains(x, y);
     const bool hoverRstAdsr = !menuOpen && resetAdsrRect().contains(x, y);
     const bool hoverAdsr = !menuOpen && adsrToggleRect().contains(x, y);
+    const bool hoverRstVel = !menuOpen && resetVelRect().contains(x, y);
+
+    int nextVelPresetHover = -1;
+    int nextVelPtHover = -1;
+    if (!menuOpen) {
+        for (int p = 0; p < 4; ++p) {
+            if (velPresetRect(p).contains(x, y)) {
+                nextVelPresetHover = p;
+                break;
+            }
+        }
+        const Rect vg = velGraphRect();
+        const Rect vgHit{vg.x - 10.0, vg.y - 10.0, vg.w + 20.0, vg.h + 20.0};
+        if (vgHit.contains(x, y) && m_controller) {
+            const double sx1 = vg.x + m_controller->getParamNormalized(kParamVelP1X) * vg.w;
+            const double sy1 = vg.y + (1.0 - m_controller->getParamNormalized(kParamVelP1Y)) * vg.h;
+            const double sx2 = vg.x + m_controller->getParamNormalized(kParamVelP2X) * vg.w;
+            const double sy2 = vg.y + (1.0 - m_controller->getParamNormalized(kParamVelP2Y)) * vg.h;
+            if (std::hypot(x - sx1, y - sy1) <= 13.0) nextVelPtHover = 0;
+            else if (std::hypot(x - sx2, y - sy2) <= 13.0) nextVelPtHover = 1;
+        }
+    }
 
     int nextSliderHover = -1;
     if (!menuOpen) {
@@ -1201,8 +1340,10 @@ void X11View::handleMotion(int x, int y) {
         hoverPaB != m_hoverPatchBox || hoverSrch != m_hoverSearchBox || hoverClr != m_hoverSearchClear ||
         hoverRstTune != m_hoverResetTune || hoverPortaTog != m_hoverPortaToggle ||
         hoverPortaMode != m_hoverPortaMode || hoverRstAdsr != m_hoverResetAdsr ||
-        hoverAdsr != m_hoverAdsrToggle || nextSliderHover != m_hoverSliderIdx ||
-        nextPopupRow != m_hoverPopupRow || nextHoverScroll != m_hoverScrollbar) {
+        hoverAdsr != m_hoverAdsrToggle || hoverRstVel != m_hoverResetVel ||
+        nextVelPresetHover != m_hoverVelPreset || nextVelPtHover != m_hoverVelPoint ||
+        nextSliderHover != m_hoverSliderIdx || nextPopupRow != m_hoverPopupRow ||
+        nextHoverScroll != m_hoverScrollbar) {
         m_hoverButton = hoverBtn;
         m_hoverPrevBank = hoverPB;
         m_hoverNextBank = hoverNB;
@@ -1217,6 +1358,9 @@ void X11View::handleMotion(int x, int y) {
         m_hoverPortaMode = hoverPortaMode;
         m_hoverResetAdsr = hoverRstAdsr;
         m_hoverAdsrToggle = hoverAdsr;
+        m_hoverResetVel = hoverRstVel;
+        m_hoverVelPreset = nextVelPresetHover;
+        m_hoverVelPoint = nextVelPtHover;
         m_hoverSliderIdx = nextSliderHover;
         m_hoverPopupRow = nextPopupRow;
         m_hoverScrollbar = nextHoverScroll;
@@ -1394,9 +1538,9 @@ void X11View::draw() {
     cairo_fill(m_cr);
 
     // Title & subtitle
-    drawText(m_cr, "AT SF2 Player", 20.0, 14.0, 210.0, "Sans Bold 13",
+    drawText(m_cr, "AT SF2 Player", 20.0, 14.0, 220.0, "Sans Bold 13",
              0.94, 0.96, 0.98, 1.0);
-    drawText(m_cr, "v" PLUGIN_VERSION "  •  SoundFont (.sf2) Player", 230.0, 17.0, 250.0, "Sans 9.5",
+    drawText(m_cr, "v" PLUGIN_VERSION "  •  SoundFont (.sf2) Player", 400.0, 17.0, 280.0, "Sans 9.5",
              0.58, 0.64, 0.72, 1.0, PANGO_ALIGN_RIGHT);
 
     // SoundFont file card
@@ -1677,12 +1821,160 @@ void X11View::draw() {
                  0.86, 0.90, 0.95, alpha, PANGO_ALIGN_RIGHT);
     }
 
+    drawVelocityPanel();
+
     if (m_dropdownMode != DropdownMode::Closed && hasPresets) {
         drawDropdown(status);
     }
 
     cairo_surface_flush(m_surface);
     XFlush(m_display);
+}
+
+void X11View::drawVelocityPanel() {
+    // Card background
+    drawRoundedRect(m_cr, 492.0, 48.0, 188.0, 412.0, 8.0);
+    cairo_set_source_rgb(m_cr, 0.129, 0.149, 0.192);
+    cairo_fill_preserve(m_cr);
+    cairo_set_source_rgb(m_cr, 0.20, 0.23, 0.29);
+    cairo_set_line_width(m_cr, 1.0);
+    cairo_stroke(m_cr);
+
+    drawText(m_cr, "Velocity Curve", 504.0, 58.0, 114.0, "Sans Bold 9.5", 0.90, 0.93, 0.97, 1.0);
+
+    // Reset button
+    const Rect rbtn = resetVelRect();
+    drawRoundedRect(m_cr, rbtn.x, rbtn.y, rbtn.w, rbtn.h, 10.0);
+    cairo_set_source_rgb(m_cr, m_hoverResetVel ? 0.24 : 0.18,
+                         m_hoverResetVel ? 0.28 : 0.21,
+                         m_hoverResetVel ? 0.36 : 0.27);
+    cairo_fill(m_cr);
+    drawText(m_cr, "Reset", rbtn.x, rbtn.y + 3.0, rbtn.w, "Sans Bold 8",
+             0.84, 0.88, 0.94, 1.0, PANGO_ALIGN_CENTER);
+
+    // Graph box
+    const Rect vg = velGraphRect();
+    cairo_set_source_rgb(m_cr, 0.085, 0.098, 0.128);
+    cairo_rectangle(m_cr, vg.x, vg.y, vg.w, vg.h);
+    cairo_fill_preserve(m_cr);
+    cairo_set_source_rgb(m_cr, 0.24, 0.28, 0.36);
+    cairo_set_line_width(m_cr, 1.0);
+    cairo_stroke(m_cr);
+
+    // 4x4 grid
+    cairo_set_source_rgba(m_cr, 0.30, 0.36, 0.46, 0.35);
+    cairo_set_line_width(m_cr, 0.8);
+    for (int i = 1; i < 4; ++i) {
+        const double frac = i * 0.25;
+        cairo_move_to(m_cr, vg.x + frac * vg.w, vg.y);
+        cairo_line_to(m_cr, vg.x + frac * vg.w, vg.y + vg.h);
+        cairo_move_to(m_cr, vg.x, vg.y + frac * vg.h);
+        cairo_line_to(m_cr, vg.x + vg.w, vg.y + frac * vg.h);
+    }
+    cairo_stroke(m_cr);
+
+    // Diagonal linear reference (dashed)
+    const double dashes[2] = {4.0, 4.0};
+    cairo_set_dash(m_cr, dashes, 2, 0.0);
+    cairo_set_source_rgba(m_cr, 0.45, 0.52, 0.64, 0.35);
+    cairo_move_to(m_cr, vg.x, vg.y + vg.h);
+    cairo_line_to(m_cr, vg.x + vg.w, vg.y);
+    cairo_stroke(m_cr);
+    cairo_set_dash(m_cr, nullptr, 0, 0.0);
+
+    // OUT / IN axis labels
+    drawText(m_cr, "OUT", vg.x + 6.0, vg.y + 4.0, 32.0, "Sans Bold 7.5", 0.55, 0.62, 0.72, 0.85);
+    drawText(m_cr, "IN", vg.x + vg.w - 22.0, vg.y + vg.h - 14.0, 18.0, "Sans Bold 7.5",
+             0.55, 0.62, 0.72, 0.85, PANGO_ALIGN_RIGHT);
+
+    const VelocityCurve curve{
+        m_controller ? m_controller->getParamNormalized(kParamVelP1X) : kDefaultVelP1X,
+        m_controller ? m_controller->getParamNormalized(kParamVelP1Y) : kDefaultVelP1Y,
+        m_controller ? m_controller->getParamNormalized(kParamVelP2X) : kDefaultVelP2X,
+        m_controller ? m_controller->getParamNormalized(kParamVelP2Y) : kDefaultVelP2Y,
+    };
+
+    // Shaded area under curve
+    cairo_save(m_cr);
+    cairo_rectangle(m_cr, vg.x, vg.y, vg.w, vg.h);
+    cairo_clip(m_cr);
+
+    constexpr int kSteps = 64;
+    cairo_move_to(m_cr, vg.x, vg.y + vg.h);
+    for (int i = 0; i <= kSteps; ++i) {
+        const float tx = static_cast<float>(i) / kSteps;
+        const float ty = curve.evaluate(tx);
+        cairo_line_to(m_cr, vg.x + tx * vg.w, vg.y + (1.0 - ty) * vg.h);
+    }
+    cairo_line_to(m_cr, vg.x + vg.w, vg.y + vg.h);
+    cairo_close_path(m_cr);
+    cairo_set_source_rgba(m_cr, 0.231, 0.510, 0.965, 0.16);
+    cairo_fill(m_cr);
+
+    // Curve stroke
+    for (int i = 0; i <= kSteps; ++i) {
+        const float tx = static_cast<float>(i) / kSteps;
+        const float ty = curve.evaluate(tx);
+        const double px = vg.x + tx * vg.w;
+        const double py = vg.y + (1.0 - ty) * vg.h;
+        if (i == 0) cairo_move_to(m_cr, px, py);
+        else cairo_line_to(m_cr, px, py);
+    }
+    cairo_set_source_rgb(m_cr, 0.30, 0.62, 0.99);
+    cairo_set_line_width(m_cr, 2.2);
+    cairo_stroke(m_cr);
+    cairo_restore(m_cr);
+
+    // Control points P1 & P2
+    auto drawHandle = [&](int idx, double pxNorm, double pyNorm, const char* tag) {
+        const double hx = vg.x + pxNorm * vg.w;
+        const double hy = vg.y + (1.0 - pyNorm) * vg.h;
+        const bool active = (m_draggingVelPoint == idx || m_hoverVelPoint == idx);
+        const double rad = active ? 7.5 : 6.0;
+
+        cairo_arc(m_cr, hx, hy, rad, 0.0, 2.0 * 3.14159265358979323846);
+        cairo_set_source_rgb(m_cr, active ? 1.0 : 0.94, active ? 1.0 : 0.96, 1.0);
+        cairo_fill_preserve(m_cr);
+        cairo_set_source_rgb(m_cr, 0.231, 0.510, 0.965);
+        cairo_set_line_width(m_cr, 2.0);
+        cairo_stroke(m_cr);
+
+        const double tx = (hx + 20.0 > vg.x + vg.w) ? (hx - 20.0) : (hx + 8.0);
+        const double ty = (hy - 14.0 < vg.y) ? (hy + 6.0) : (hy - 14.0);
+        drawText(m_cr, tag, tx, ty, 20.0, "Sans Bold 7.5", 0.85, 0.91, 0.98, 0.9);
+    };
+    drawHandle(0, curve.p1x, curve.p1y, "P1");
+    drawHandle(1, curve.p2x, curve.p2y, "P2");
+
+    // Readout of P1 & P2 in MIDI velocity units (0..127)
+    char p1Buf[64] = {}, p2Buf[64] = {};
+    std::snprintf(p1Buf, sizeof(p1Buf), "P1: In %d -> Out %d",
+                  static_cast<int>(std::lround(curve.p1x * 127.0)),
+                  static_cast<int>(std::lround(curve.p1y * 127.0)));
+    std::snprintf(p2Buf, sizeof(p2Buf), "P2: In %d -> Out %d",
+                  static_cast<int>(std::lround(curve.p2x * 127.0)),
+                  static_cast<int>(std::lround(curve.p2y * 127.0)));
+    drawText(m_cr, p1Buf, 506.0, 264.0, 160.0, "Sans 8.5", 0.78, 0.84, 0.92, 1.0);
+    drawText(m_cr, p2Buf, 506.0, 284.0, 160.0, "Sans 8.5", 0.78, 0.84, 0.92, 1.0);
+
+    // Quick curve preset buttons
+    drawText(m_cr, "Quick Presets", 506.0, 330.0, 160.0, "Sans Bold 8.5", 0.65, 0.72, 0.82, 1.0);
+    static constexpr const char* kPresetNames[4] = {"Linear", "Soft", "Hard", "Fixed 127"};
+    for (int p = 0; p < 4; ++p) {
+        const Rect pr = velPresetRect(p);
+        const bool hov = (m_hoverVelPreset == p);
+        drawRoundedRect(m_cr, pr.x, pr.y, pr.w, pr.h, 5.0);
+        cairo_set_source_rgb(m_cr, hov ? 0.24 : 0.18, hov ? 0.28 : 0.21, hov ? 0.36 : 0.27);
+        cairo_fill_preserve(m_cr);
+        cairo_set_source_rgb(m_cr, 0.27, 0.32, 0.40);
+        cairo_set_line_width(m_cr, 1.0);
+        cairo_stroke(m_cr);
+        drawText(m_cr, kPresetNames[p], pr.x, pr.y + 3.0, pr.w, "Sans Bold 8",
+                 0.88, 0.92, 0.98, 1.0, PANGO_ALIGN_CENTER);
+    }
+
+    drawText(m_cr, "Drag P1/P2 points on graph.\nSnap to left/right edges for Fixed.",
+             506.0, 418.0, 162.0, "Sans 7.5", 0.54, 0.60, 0.68, 1.0);
 }
 
 } // namespace SuperSimpleSF2
