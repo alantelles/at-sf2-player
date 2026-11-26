@@ -20,6 +20,10 @@
 #include <thread>
 #include <vector>
 
+#ifndef PLUGIN_VERSION
+#define PLUGIN_VERSION "1.0.0"
+#endif
+
 namespace SuperSimpleSF2 {
 
 using namespace Steinberg;
@@ -1390,9 +1394,9 @@ void X11View::draw() {
     cairo_fill(m_cr);
 
     // Title & subtitle
-    drawText(m_cr, "AT SF2 Player", 20.0, 14.0, 250.0, "Sans Bold 13",
+    drawText(m_cr, "AT SF2 Player", 20.0, 14.0, 210.0, "Sans Bold 13",
              0.94, 0.96, 0.98, 1.0);
-    drawText(m_cr, "SoundFont (.sf2) Player", 270.0, 17.0, 210.0, "Sans 9.5",
+    drawText(m_cr, "v" PLUGIN_VERSION "  •  SoundFont (.sf2) Player", 230.0, 17.0, 250.0, "Sans 9.5",
              0.58, 0.64, 0.72, 1.0, PANGO_ALIGN_RIGHT);
 
     // SoundFont file card

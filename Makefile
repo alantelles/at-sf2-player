@@ -1,5 +1,8 @@
+VERSION ?= $(shell cat VERSION 2>/dev/null || echo 1.0.0)
+
 CXX := g++
 CXXFLAGS := -std=c++17 -O2 -Wall -Wextra -fPIC -fvisibility=hidden -MMD -MP -DRELEASE=1 \
+            -DPLUGIN_VERSION=\"$(VERSION)\" \
             -Isrc -Ithird_party -Ithird_party/pluginterfaces \
             $(shell pkg-config --cflags x11 cairo pangocairo)
 LDFLAGS := -shared -Wl,--no-undefined -static-libstdc++ -static-libgcc \
@@ -35,7 +38,7 @@ all: $(TARGET)
 $(TARGET): $(PLUGIN_OBJS)
 	@mkdir -p $(SO_DIR) $(RES_DIR)
 	$(CXX) $(PLUGIN_OBJS) -o $@ $(LDFLAGS)
-	cp README.md LICENSE $(RES_DIR)/
+	cp README.md LICENSE VERSION $(RES_DIR)/
 
 build/obj/%.o: %.cpp
 	@mkdir -p $(dir $@)

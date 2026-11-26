@@ -26,10 +26,15 @@ jobs:
 
       - name: Build, test, and package VST3 bundle
         run: |
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            BUILD_VER="${GITHUB_REF_NAME#v}"
+          else
+            BUILD_VER="$(cat VERSION)"
+          fi
           make clean
-          make
+          make VERSION="$BUILD_VER"
           make test
-          make dist
+          make dist VERSION="$BUILD_VER"
           objdump -T build/ATSF2Player.vst3/Contents/x86_64-linux/ATSF2Player.so | grep -oE 'GLIBC_[0-9.]+' | sort -Vu | tail -n 5
 
       - name: Upload ZIP artifact

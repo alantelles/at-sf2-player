@@ -9,6 +9,10 @@
 
 #include <cstring>
 
+#ifndef PLUGIN_VERSION
+#define PLUGIN_VERSION "1.0.0"
+#endif
+
 namespace SuperSimpleSF2 {
 
 using namespace Steinberg;
@@ -65,7 +69,7 @@ public:
             *info = PClassInfo2(
                 uid, PClassInfo::kManyInstances, kVstAudioEffectClass,
                 "AT SF2 Player", 0, PlugType::kInstrumentSampler,
-                "Alan Telles", "1.0.0.0", "VST 3.7");
+                "Alan Telles", PLUGIN_VERSION, "VST 3.7");
             return kResultOk;
         }
         if (index == 1) {
@@ -74,7 +78,7 @@ public:
             *info = PClassInfo2(
                 uid, PClassInfo::kManyInstances, kVstComponentControllerClass,
                 "AT SF2 Player Controller", 0, "",
-                "Alan Telles", "1.0.0.0", "VST 3.7");
+                "Alan Telles", PLUGIN_VERSION, "VST 3.7");
             return kResultOk;
         }
         return kInvalidArgument;
