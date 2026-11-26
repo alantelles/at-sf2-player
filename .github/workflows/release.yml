@@ -1,0 +1,45 @@
+name: Build Linux VST3 (Ubuntu 20.04)
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build-linux-x86_64:
+    runs-on: ubuntu-latest
+    container:
+      image: ubuntu:20.04
+
+    steps:
+      - name: Install build dependencies
+        run: |
+          apt-get update
+          DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            build-essential pkg-config libx11-dev libcairo2-dev libpango1.0-dev zip timgm6mb-soundfont git ca-certificates
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Build, test, and package VST3 bundle
+        run: |
+          make clean
+          make
+          make test
+          make dist
+          objdump -T build/ATSF2Player.vst3/Contents/x86_64-linux/ATSF2Player.so | grep -oE 'GLIBC_[0-9.]+' | sort -Vu | tail -n 5
+
+      - name: Upload ZIP artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ATSF2Player-linux-x86_64
+          path: build/ATSF2Player-linux-x86_64.zip
+
+      - name: Attach ZIP to GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: build/ATSF2Player-linux-x86_64.zip

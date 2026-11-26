@@ -12,27 +12,43 @@ Um plugin **VST3** leve e direto para **Linux** (`x86_64`) que carrega e toca ar
 - **Envelope ADSR**: ligado por padrão (`ADSR: ON`), com **Attack**, **Decay**, **Sustain**, **Release**, botão **Reset** e piso anti-clique automático de `15 ms` mesmo no modo nativo do SF2.
 - **MIDI & Projeto**: suporte a Note On/Off, Pitch Bend e Sustain Pedal, além de salvamento e restauração completa do estado na DAW.
 
-## Dependências (Linux)
+## Instalação pelo Bundle Pronto (`.zip`)
 
-Para compilar:
-- `g++` (C++17), `make`, `pkg-config`
+1. Baixe `ATSF2Player-linux-x86_64.zip` (da aba *Releases* ou gerado via `make dist`).
+2. Extraia diretamente na sua pasta de plugins VST3 (`~/.vst3/`):
+   ```bash
+   mkdir -p ~/.vst3
+   unzip -o ATSF2Player-linux-x86_64.zip -d ~/.vst3/
+   ```
+3. Reescaneie os plugins na sua DAW (REAPER, Ardour, Bitwig, Carla, etc.).
+
+*(Em runtime, o seletor de arquivos usa `zenity` ou `kdialog`.)*
+
+## Dependências de Compilação (Linux)
+
+- `g++` (C++17), `make`, `pkg-config`, `zip`
 - `libx11-dev`, `libcairo2-dev`, `libpango1.0-dev`
-
-Em runtime (para o diálogo de seleção de arquivo):
-- `zenity` (ou `kdialog`)
 
 No Ubuntu/Debian:
 ```bash
-sudo apt install build-essential pkg-config libx11-dev libcairo2-dev libpango1.0-dev zenity
+sudo apt install build-essential pkg-config libx11-dev libcairo2-dev libpango1.0-dev zip zenity
 ```
 
-## Compilação, Testes e Instalação
+## Compilação, Testes e Empacotamento
 
 ```bash
 make
 make test
+make dist      # gera build/ATSF2Player-linux-x86_64.zip
 make install   # instala em ~/.vst3/ATSF2Player.vst3
 ```
+
+### Build portátil via Docker (Ubuntu 20.04 / glibc 2.31)
+Para gerar o `.zip` compatível com distros mais antigas e modernas (com `libstdc++`/`libgcc` estáticos):
+```bash
+./scripts/build-release.sh
+```
+O workflow [release.yml](.github/workflows/release.yml) também executa esse mesmo build no GitHub Actions (e publica o `.zip` automaticamente em tags `v*`).
 
 ## Licença
 
