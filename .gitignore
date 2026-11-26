@@ -1,0 +1,14 @@
+# Build artifacts
+build/
+*.o
+*.d
+*.so
+*.vst3/
+
+# Editor / IDE / OS files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
