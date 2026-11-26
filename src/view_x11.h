@@ -139,6 +139,8 @@ private:
     Window m_window = 0;
     cairo_surface_t* m_surface = nullptr;
     cairo_t* m_cr = nullptr;
+    cairo_surface_t* m_backSurface = nullptr;
+    cairo_t* m_backCr = nullptr;
 
     bool m_attached = false;
     int m_lastMouseX = 0;

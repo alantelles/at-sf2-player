@@ -66,6 +66,7 @@ void drawText(cairo_t* cr, const char* text, double x, double y, double maxW,
     cairo_set_source_rgba(cr, r, g, b, a);
     cairo_move_to(cr, x, y);
     pango_cairo_show_layout(cr, layout);
+    cairo_new_path(cr);
     cairo_restore(cr);
 
     g_object_unref(layout);
@@ -338,6 +339,8 @@ tresult PLUGIN_API X11View::attached(void* parent, FIDString type) {
     m_surface = cairo_xlib_surface_create(
         m_display, m_window, DefaultVisual(m_display, screen), kWidth, kHeight);
     m_cr = cairo_create(m_surface);
+    m_backSurface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, kWidth, kHeight);
+    m_backCr = cairo_create(m_backSurface);
 
     if (m_plugFrame) {
         m_plugFrame->queryInterface(Linux::IRunLoop::iid, reinterpret_cast<void**>(&m_runLoop));
@@ -365,6 +368,14 @@ tresult PLUGIN_API X11View::removed() {
         m_runLoop = nullptr;
     }
 
+    if (m_backCr) {
+        cairo_destroy(m_backCr);
+        m_backCr = nullptr;
+    }
+    if (m_backSurface) {
+        cairo_surface_destroy(m_backSurface);
+        m_backSurface = nullptr;
+    }
     if (m_cr) {
         cairo_destroy(m_cr);
         m_cr = nullptr;
@@ -1523,7 +1534,11 @@ void X11View::drawDropdown(const Sf2Status& status) {
 }
 
 void X11View::draw() {
-    if (!m_cr || !m_surface) return;
+    if (!m_cr || !m_surface || !m_backCr || !m_backSurface) return;
+
+    cairo_t* const origCr = m_cr;
+    m_cr = m_backCr;
+    cairo_new_path(m_cr);
 
     const Sf2Status status = m_controller ? m_controller->getUiStatus() : Sf2Status{};
     const bool adsrEnabled = m_controller ? (m_controller->getParamNormalized(kParamAdsrEnabled) >= 0.5) : false;
@@ -1827,6 +1842,11 @@ void X11View::draw() {
         drawDropdown(status);
     }
 
+    cairo_surface_flush(m_backSurface);
+    m_cr = origCr;
+    cairo_set_source_surface(m_cr, m_backSurface, 0.0, 0.0);
+    cairo_paint(m_cr);
+
     cairo_surface_flush(m_surface);
     XFlush(m_display);
 }
@@ -1932,6 +1952,7 @@ void X11View::drawVelocityPanel() {
         const bool active = (m_draggingVelPoint == idx || m_hoverVelPoint == idx);
         const double rad = active ? 7.5 : 6.0;
 
+        cairo_new_path(m_cr);
         cairo_arc(m_cr, hx, hy, rad, 0.0, 2.0 * 3.14159265358979323846);
         cairo_set_source_rgb(m_cr, active ? 1.0 : 0.94, active ? 1.0 : 0.96, 1.0);
         cairo_fill_preserve(m_cr);
